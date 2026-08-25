@@ -24,10 +24,12 @@
     "class-validator": "^0.14.2",
     "helmet": "^8.1.0",
     "mongoose": "^8.18.0",
+    "openai": "^7.5.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

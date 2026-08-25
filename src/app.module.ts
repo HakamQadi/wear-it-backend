@@ -10,6 +10,7 @@ import { OrdersModule } from './orders/orders.module';
 import { ProductsModule } from './products/products.module';
 import { SeedModule } from './seed/seed.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { TryOnModule } from './try-on/try-on.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -26,6 +27,7 @@ import { AppController } from './app.controller';
     OrdersModule,
     ContentModule,
     UploadsModule,
+    TryOnModule,
     SeedModule,
   ],
   controllers: [AppController],
