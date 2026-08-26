@@ -40,6 +40,7 @@ export class AdminService {
     return types.map((type) => ({
       _id: type._id.toString(),
       name: type.name,
+      nameAr: type.nameAr,
       slug: type.slug,
       isActive: type.isActive,
       sortOrder: type.sortOrder,

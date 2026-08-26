@@ -1,4 +1,5 @@
-import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
+import { expectAppError } from '../common/errors/expect-app-error';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
 import { TryOnService } from './try-on.service';
@@ -89,20 +90,24 @@ describe('TryOnService', () => {
 
   it('refuses image sources that are not internal uploads', async () => {
     const service = new TryOnService(configured());
-    await expect(
+    await expectAppError(
       service.composeLook({
         personImageUrl: 'https://attacker.test/ssrf.png',
         garments: [{ label: 'T-shirt', imageUrl: '/uploads/tee.png' }],
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+      HttpStatus.BAD_REQUEST,
+      'AI_INVALID_SOURCE',
+    );
     expect(mockImagesEdit).not.toHaveBeenCalled();
   });
 
   it('reports a clear error when the API key is missing', async () => {
     const service = new TryOnService(new ConfigService({}));
-    await expect(
+    await expectAppError(
       service.composeLook({ personImageUrl: '/uploads/me.png', garments: [{ label: 'T-shirt', imageUrl: '/uploads/t.png' }] }),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      HttpStatus.SERVICE_UNAVAILABLE,
+      'AI_NOT_CONFIGURED',
+    );
     expect(service.isConfigured()).toBe(false);
   });
 });

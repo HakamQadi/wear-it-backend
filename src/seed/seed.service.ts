@@ -9,20 +9,20 @@ import { SiteContent } from '../content/content.schema';
 
 /** Ordered base layer first so generated looks layer garments naturally. */
 const DEFAULT_CLOTHING_TYPES = [
-  { name: 'T-shirt', slug: 't-shirt', description: 'Tees and short-sleeve tops.', sortOrder: 10 },
-  { name: 'Shirt', slug: 'shirt', description: 'Buttoned shirts and blouses.', sortOrder: 20 },
-  { name: 'Sweater', slug: 'sweater', description: 'Knitwear, hoodies and sweatshirts.', sortOrder: 30 },
-  { name: 'Dress', slug: 'dress', description: 'One-piece dresses.', sortOrder: 40 },
-  { name: 'Pants', slug: 'pants', description: 'Trousers, jeans and chinos.', sortOrder: 50 },
-  { name: 'Skirt', slug: 'skirt', description: 'Skirts of any length.', sortOrder: 60 },
-  { name: 'Shorts', slug: 'shorts', description: 'Short-length bottoms.', sortOrder: 70 },
-  { name: 'Jacket', slug: 'jacket', description: 'Jackets, blazers and light layers.', sortOrder: 80 },
-  { name: 'Coat', slug: 'coat', description: 'Heavier outerwear.', sortOrder: 90 },
-  { name: 'Suit', slug: 'suit', description: 'Full suits and tailored sets.', sortOrder: 100 },
-  { name: 'Shoes', slug: 'shoes', description: 'Footwear of every kind.', sortOrder: 110 },
-  { name: 'Bag', slug: 'bag', description: 'Bags and backpacks.', sortOrder: 120 },
-  { name: 'Hat', slug: 'hat', description: 'Hats, caps and headwear.', sortOrder: 130 },
-  { name: 'Accessory', slug: 'accessory', description: 'Scarves, belts, jewellery and more.', sortOrder: 140 },
+  { name: 'T-shirt', slug: 't-shirt', nameAr: 'تي شيرت', description: 'Tees and short-sleeve tops.', sortOrder: 10 },
+  { name: 'Shirt', slug: 'shirt', nameAr: 'قميص', description: 'Buttoned shirts and blouses.', sortOrder: 20 },
+  { name: 'Sweater', slug: 'sweater', nameAr: 'كنزة', description: 'Knitwear, hoodies and sweatshirts.', sortOrder: 30 },
+  { name: 'Dress', slug: 'dress', nameAr: 'فستان', description: 'One-piece dresses.', sortOrder: 40 },
+  { name: 'Pants', slug: 'pants', nameAr: 'بنطال', description: 'Trousers, jeans and chinos.', sortOrder: 50 },
+  { name: 'Skirt', slug: 'skirt', nameAr: 'تنورة', description: 'Skirts of any length.', sortOrder: 60 },
+  { name: 'Shorts', slug: 'shorts', nameAr: 'شورت', description: 'Short-length bottoms.', sortOrder: 70 },
+  { name: 'Jacket', slug: 'jacket', nameAr: 'جاكيت', description: 'Jackets, blazers and light layers.', sortOrder: 80 },
+  { name: 'Coat', slug: 'coat', nameAr: 'معطف', description: 'Heavier outerwear.', sortOrder: 90 },
+  { name: 'Suit', slug: 'suit', nameAr: 'بدلة', description: 'Full suits and tailored sets.', sortOrder: 100 },
+  { name: 'Shoes', slug: 'shoes', nameAr: 'حذاء', description: 'Footwear of every kind.', sortOrder: 110 },
+  { name: 'Bag', slug: 'bag', nameAr: 'حقيبة', description: 'Bags and backpacks.', sortOrder: 120 },
+  { name: 'Hat', slug: 'hat', nameAr: 'قبعة', description: 'Hats, caps and headwear.', sortOrder: 130 },
+  { name: 'Accessory', slug: 'accessory', nameAr: 'إكسسوار', description: 'Scarves, belts, jewellery and more.', sortOrder: 140 },
 ];
 
 @Injectable()
@@ -63,21 +63,8 @@ export class SeedService implements OnModuleInit {
   }
 
   private async seedContent() {
-    await this.content.updateOne(
-      { key: 'main' },
-      {
-        $setOnInsert: {
-          key: 'main',
-          brandName: 'Wear It',
-          heroTitle: 'Your closet, digitised.',
-          heroSubtitle:
-            'Photograph what you already own, save it to your virtual wardrobe, then let AI show you wearing any combination of it.',
-          heroCta: 'Build my closet',
-          announcement: 'Plan tomorrow’s outfit tonight — from the clothes you already own.',
-          footerText: 'A digital wardrobe that shows you the outfit before you wear it.',
-        },
-      },
-      { upsert: true },
-    );
+    // Only creates the document when missing; the schema defaults supply both languages.
+    await this.content.updateOne({ key: 'main' }, { $setOnInsert: { key: 'main' } }, { upsert: true });
   }
+
 }

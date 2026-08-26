@@ -77,6 +77,27 @@ that is not a public web address:
 `IMAGE_IMPORT_ALLOW_LOOPBACK=true` lifts the loopback and port rules **only**, so the
 end-to-end suite can import from its own test server. Leave it off everywhere else.
 
+## Languages
+
+The API stays language-neutral and lets the client decide what to show.
+
+- **Site content** is stored per language: every field in `sitecontents` is `{ ar, en }`.
+  `PATCH /api/content` merges per language, so saving Arabic alone never blanks the English
+  copy. Documents written before the site was bilingual hold a plain string; those are read
+  as the copy for both languages until an admin edits them, so no migration script is needed.
+- **Clothing types** carry `name` and `nameAr`. `nameAr` is optional and falls back to `name`.
+- **Errors** carry a stable `code` alongside their English `message`, plus `params` for the
+  values a translated sentence interpolates:
+
+  ```json
+  { "statusCode": 400, "code": "ITEM_TYPE_CLASH",
+    "message": "A look can only include one T-shirt. You selected 2: white tee, black tee.",
+    "params": { "type": "T-shirt", "count": 2, "names": "white tee, black tee" } }
+  ```
+
+  Clients translate by code and fall back to the message. Field-validation messages from
+  `class-validator` are still English.
+
 ## Privacy and storage
 
 - Personal photos, item photos and generated looks live in `UPLOADS_DIR` (default `uploads/`)

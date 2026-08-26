@@ -87,6 +87,7 @@ async function run() {
 
   const duplicate = await call('/auth/register', { method: 'POST', body: userA });
   check('duplicate email is rejected', duplicate.status === 409, `status ${duplicate.status}`);
+  check('the duplicate is coded for translation', duplicate.data?.code === 'EMAIL_TAKEN', duplicate.data?.code);
 
   const weak = await call('/auth/register', { method: 'POST', body: { ...userB, password: 'short' } });
   check('short password is rejected', weak.status === 400, `status ${weak.status}`);
@@ -97,6 +98,7 @@ async function run() {
 
   const badLogin = await call('/auth/login', { method: 'POST', body: { email: userA.email, password: 'WrongPass1!' } });
   check('wrong password is rejected', badLogin.status === 401, `status ${badLogin.status}`);
+  check('the rejection is coded for translation', badLogin.data?.code === 'INVALID_CREDENTIALS', badLogin.data?.code);
 
   const meA = await call('/auth/me', { token: tokenA });
   check('GET /auth/me reports the real role', meA.status === 200 && meA.data?.role === 'user', JSON.stringify(meA.data));
@@ -136,10 +138,23 @@ async function run() {
   const created = await call('/clothing-types', {
     method: 'POST',
     token: adminToken,
-    body: { name: `QA Cape ${stamp}`, slug: `qa-cape-${stamp}`, description: 'Temporary QA type', sortOrder: 200 },
+    body: {
+      name: `QA Cape ${stamp}`,
+      nameAr: `عباءة ${stamp}`,
+      slug: `qa-cape-${stamp}`,
+      description: 'Temporary QA type',
+      sortOrder: 200,
+    },
   });
   check('admin can create a clothing type', created.status === 201, `status ${created.status}`);
+  check('a clothing type keeps its Arabic name', created.data?.nameAr === `عباءة ${stamp}`, created.data?.nameAr);
   const capeId = created.data?._id;
+
+  check(
+    'seeded clothing types carry Arabic names',
+    publicTypes.data.every((type) => typeof type.nameAr === 'string' && type.nameAr.length > 0),
+    JSON.stringify(publicTypes.data.slice(0, 2).map((type) => [type.slug, type.nameAr])),
+  );
 
   const badSlug = await call('/clothing-types', { method: 'POST', token: adminToken, body: { name: 'Bad Slug', slug: 'Not A Slug' } });
   check('invalid slug is rejected', badSlug.status === 400, `status ${badSlug.status}`);
@@ -187,7 +202,8 @@ async function run() {
   ]) {
     const blocked = await importImage({ url });
     check(`importing from ${label} is refused`, blocked.status === 400, `status ${blocked.status}`);
-    check(`the refusal for ${label} names the reason`, /private or internal address/.test(messageOf(blocked.data)), messageOf(blocked.data));
+      check(`the refusal for ${label} names the reason`, /private or internal address/.test(messageOf(blocked.data)), messageOf(blocked.data));
+    check(`the refusal for ${label} is coded`, blocked.data?.code === 'IMPORT_BLOCKED_HOST', blocked.data?.code);
   }
 
   for (const [label, url] of [
@@ -260,6 +276,12 @@ async function run() {
   });
   check('two items of the same type are rejected', sameType.status === 400, `status ${sameType.status}`);
   check('the rejection names the clashing type', /only include one T-shirt/.test(messageOf(sameType.data)), messageOf(sameType.data));
+  check('the rejection carries a code a client can translate', sameType.data?.code === 'ITEM_TYPE_CLASH', sameType.data?.code);
+  check(
+    'the rejection carries the values a translated sentence needs',
+    sameType.data?.params?.type === 'T-shirt' && sameType.data?.params?.count === 2,
+    JSON.stringify(sameType.data?.params),
+  );
 
   const duplicateItem = await call('/looks/generate', {
     method: 'POST',
@@ -341,13 +363,45 @@ async function run() {
   const inUse = await call(`/clothing-types/${tshirt._id}`, { method: 'DELETE', token: adminToken });
   check('a clothing type still in use cannot be deleted', inUse.status === 400, `status ${inUse.status}`);
   check('the refusal explains why', /wardrobe item/.test(messageOf(inUse.data)), messageOf(inUse.data));
+  check('the refusal is coded', inUse.data?.code === 'TYPE_IN_USE', inUse.data?.code);
   const unusedDelete = await call(`/clothing-types/${capeId}`, { method: 'DELETE', token: adminToken });
   check('an unused clothing type can be deleted', unusedDelete.status === 200, `status ${unusedDelete.status}`);
 
-  section('Content CMS');
-  const contentUpdate = await call('/content', { method: 'PATCH', token: adminToken, body: { announcement: `QA ${stamp}` } });
-  check('admin can update site content', contentUpdate.status === 200 && contentUpdate.data?.announcement === `QA ${stamp}`);
-  check('content is publicly readable', (await call('/content')).data?.announcement === `QA ${stamp}`);
+  section('Content CMS (bilingual)');
+  const publicContent = await call('/content');
+  check(
+    'every content field is returned in both languages',
+    ['brandName', 'heroTitle', 'heroSubtitle', 'heroCta', 'announcement', 'footerText'].every(
+      (field) => typeof publicContent.data?.[field]?.ar === 'string' && typeof publicContent.data?.[field]?.en === 'string',
+    ),
+    JSON.stringify(publicContent.data?.heroTitle),
+  );
+  check(
+    'the default Arabic copy is Arabic',
+    /[\u0600-\u06FF]/.test(publicContent.data?.heroTitle?.ar || ''),
+    publicContent.data?.heroTitle?.ar,
+  );
+
+  const contentUpdate = await call('/content', {
+    method: 'PATCH',
+    token: adminToken,
+    body: { announcement: { ar: `عربي ${stamp}`, en: `QA ${stamp}` } },
+  });
+  check('admin can update both languages at once', contentUpdate.status === 200, `status ${contentUpdate.status}`);
+  check('the Arabic copy is stored', contentUpdate.data?.announcement?.ar === `عربي ${stamp}`);
+  check('the English copy is stored', contentUpdate.data?.announcement?.en === `QA ${stamp}`);
+
+  const arabicOnly = await call('/content', {
+    method: 'PATCH',
+    token: adminToken,
+    body: { announcement: { ar: `عربي فقط ${stamp}` } },
+  });
+  check('saving one language leaves the other intact', arabicOnly.data?.announcement?.en === `QA ${stamp}`, JSON.stringify(arabicOnly.data?.announcement));
+
+  const rejected = await call('/content', { method: 'PATCH', token: adminToken, body: { announcement: 'a bare string' } });
+  check('a bare string is rejected in place of a language pair', rejected.status === 400, `status ${rejected.status}`);
+
+  check('content is publicly readable', (await call('/content')).data?.announcement?.ar === `عربي فقط ${stamp}`);
 
   section('Admin reporting');
   const stats = await call('/admin/stats', { token: adminToken });

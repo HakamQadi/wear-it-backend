@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
@@ -6,6 +6,7 @@ import { Model } from 'mongoose';
 import { JwtPayload } from '../common/types/jwt-payload';
 import { LoginDto, RegisterDto } from './auth.dto';
 import { User, UserDocument } from './user.schema';
+import { AppError } from '../common/errors/app-error';
 
 const BCRYPT_ROUNDS = 12;
 const DUPLICATE_KEY_CODE = 11000;
@@ -20,7 +21,7 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const email = dto.email.toLowerCase().trim();
     if (await this.userModel.exists({ email })) {
-      throw new ConflictException('An account with this email already exists');
+      throw AppError.conflict('EMAIL_TAKEN', 'An account with this email already exists');
     }
     try {
       const created = await this.userModel.create({
@@ -32,7 +33,7 @@ export class AuthService {
       return this.session(created);
     } catch (error: unknown) {
       if ((error as { code?: number }).code === DUPLICATE_KEY_CODE) {
-        throw new ConflictException('An account with this email already exists');
+        throw AppError.conflict('EMAIL_TAKEN', 'An account with this email already exists');
       }
       throw error;
     }
@@ -41,14 +42,14 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.userModel.findOne({ email: dto.email.toLowerCase().trim() }).exec();
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw AppError.unauthorized('INVALID_CREDENTIALS', 'Invalid email or password');
     }
     return this.session(user);
   }
 
   async me(payload: JwtPayload) {
     const user = await this.userModel.findById(payload.sub).lean().exec();
-    if (!user) throw new NotFoundException('Account not found');
+    if (!user) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found');
     return { id: user._id.toString(), email: user.email, name: user.name, role: user.role };
   }
 

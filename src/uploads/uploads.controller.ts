@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { diskStorage } from 'multer';
@@ -8,6 +8,7 @@ import { JwtPayload } from '../common/types/jwt-payload';
 import { RemoteImageService } from './remote-image.service';
 import { ImportImageDto } from './uploads.dto';
 import { UPLOAD_ERROR, UPLOAD_FIELD, UPLOAD_MAX_BYTES, UPLOAD_MIME_EXTENSIONS, UPLOADS_DIRECTORY } from './uploads.constants';
+import { AppError } from '../common/errors/app-error';
 
 @UseGuards(JwtAuthGuard)
 @Controller('uploads')
@@ -29,7 +30,7 @@ export class UploadsController {
     }),
   )
   upload(@UploadedFile() file?: Express.Multer.File) {
-    if (!file) throw new BadRequestException(UPLOAD_ERROR);
+    if (!file) throw AppError.badRequest('UPLOAD_INVALID', UPLOAD_ERROR);
     return { url: `/uploads/${file.filename}` };
   }
 

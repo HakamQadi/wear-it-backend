@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model } from 'mongoose';
 import { WardrobeItem } from '../wardrobe/wardrobe-item.schema';
 import { CreateClothingTypeDto, UpdateClothingTypeDto } from './clothing-type.dto';
 import { ClothingType } from './clothing-type.schema';
+import { AppError } from '../common/errors/app-error';
 
 const DUPLICATE_KEY_CODE = 11000;
 
@@ -23,9 +24,9 @@ export class ClothingTypesService {
   }
 
   async findActiveById(id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Clothing type not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found');
     const type = await this.typeModel.findOne({ _id: id, isActive: true }).lean().exec();
-    if (!type) throw new NotFoundException('Clothing type not found or no longer available');
+    if (!type) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found or no longer available');
     return type;
   }
 
@@ -39,10 +40,10 @@ export class ClothingTypesService {
   }
 
   async update(id: string, dto: UpdateClothingTypeDto) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Clothing type not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found');
     try {
       const type = await this.typeModel.findByIdAndUpdate(id, dto, { new: true, runValidators: true }).lean().exec();
-      if (!type) throw new NotFoundException('Clothing type not found');
+      if (!type) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found');
       return type;
     } catch (error: unknown) {
       throw this.asHttpError(error);
@@ -50,21 +51,23 @@ export class ClothingTypesService {
   }
 
   async remove(id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Clothing type not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found');
     const itemCount = await this.itemModel.countDocuments({ typeId: id }).exec();
     if (itemCount > 0) {
-      throw new BadRequestException(
+      throw AppError.badRequest(
+        'TYPE_IN_USE',
         `${itemCount} wardrobe item(s) still use this type. Hide it instead of deleting, or wait until it is empty.`,
+        { count: itemCount },
       );
     }
     const type = await this.typeModel.findByIdAndDelete(id).lean().exec();
-    if (!type) throw new NotFoundException('Clothing type not found');
+    if (!type) throw AppError.notFound('TYPE_NOT_FOUND', 'Clothing type not found');
     return { deleted: true };
   }
 
   private asHttpError(error: unknown) {
     if ((error as { code?: number }).code === DUPLICATE_KEY_CODE) {
-      return new ConflictException('A clothing type with this name or slug already exists');
+      return AppError.conflict('TYPE_DUPLICATE', 'A clothing type with this name or slug already exists');
     }
     return error;
   }

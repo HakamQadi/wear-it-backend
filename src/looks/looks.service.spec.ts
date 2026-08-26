@@ -1,4 +1,5 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpStatus } from '@nestjs/common';
+import { expectAppError } from '../common/errors/expect-app-error';
 import { Types } from 'mongoose';
 import { PhotosService } from '../photos/photos.service';
 import { TryOnService } from '../try-on/try-on.service';
@@ -87,8 +88,10 @@ describe('LooksService.generate', () => {
     const { service } = build([tee]);
     const id = tee._id.toString();
 
-    await expect(service.generate(new Types.ObjectId().toString(), { itemIds: [id, id], photoId })).rejects.toBeInstanceOf(
-      BadRequestException,
+    await expectAppError(
+      service.generate(new Types.ObjectId().toString(), { itemIds: [id, id], photoId }),
+      HttpStatus.BAD_REQUEST,
+      'ITEM_DUPLICATE',
     );
   });
 
@@ -96,12 +99,14 @@ describe('LooksService.generate', () => {
     const mine = item('tee', TEE_TYPE);
     const { service } = build([mine]);
 
-    await expect(
+    await expectAppError(
       service.generate(new Types.ObjectId().toString(), {
         itemIds: [mine._id.toString(), new Types.ObjectId().toString()],
         photoId,
       }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+      HttpStatus.NOT_FOUND,
+      'ITEM_NOT_YOURS',
+    );
   });
 
   it('accepts one item per type and layers them in clothing-type order', async () => {

@@ -12,6 +12,10 @@ export class ClothingType {
   @Prop({ required: true, unique: true, trim: true })
   name!: string;
 
+  /** Arabic label shown to members; falls back to `name` when an admin leaves it empty. */
+  @Prop({ default: '', trim: true })
+  nameAr!: string;
+
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   slug!: string;
 

@@ -1,7 +1,8 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AccountRole, JwtPayload } from '../types/jwt-payload';
+import { AppError } from '../../common/errors/app-error';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -16,7 +17,7 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
     if (!user || !required.includes(user.role)) {
-      throw new ForbiddenException('You do not have access to this resource');
+      throw AppError.forbidden('FORBIDDEN', 'You do not have access to this resource');
     }
     return true;
   }

@@ -1,11 +1,6 @@
-import {
-  BadGatewayException,
-  BadRequestException,
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AppError } from '../common/errors/app-error';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import OpenAI, { APIError, toFile } from 'openai';
@@ -47,7 +42,7 @@ export class TryOnService {
 
   async composeLook(input: ComposeLookInput): Promise<{ imageUrl: string }> {
     const apiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
-    if (!apiKey) throw new ServiceUnavailableException(TRY_ON_ERRORS.apiKeyMissing);
+    if (!apiKey) throw AppError.serviceUnavailable('AI_NOT_CONFIGURED', TRY_ON_ERRORS.apiKeyMissing);
 
     const [personBuffer, ...garmentBuffers] = await Promise.all([
       this.loadImage(input.personImageUrl, 1024, 1536),
@@ -76,7 +71,7 @@ export class TryOnService {
       });
 
       const generatedBase64 = response.data?.[0]?.b64_json;
-      if (!generatedBase64) throw new BadGatewayException(TRY_ON_ERRORS.generationFailed);
+      if (!generatedBase64) throw AppError.badGateway('AI_FAILED', TRY_ON_ERRORS.generationFailed);
 
       const filename = `look-${randomUUID()}.${TRY_ON_OUTPUT_FORMAT}`;
       await mkdir(UPLOADS_DIRECTORY, { recursive: true });
@@ -89,15 +84,15 @@ export class TryOnService {
 
   private async loadImage(url: string, width: number, height: number): Promise<Buffer> {
     const path = StorageService.resolveLocalPath(url);
-    if (!path) throw new BadRequestException(TRY_ON_ERRORS.invalidSource);
+    if (!path) throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
 
     let raw: Buffer;
     try {
       raw = await readFile(path);
     } catch {
-      throw new BadRequestException(TRY_ON_ERRORS.invalidSource);
+      throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
     }
-    if (raw.length > TRY_ON_MAX_SOURCE_BYTES) throw new BadRequestException(TRY_ON_ERRORS.invalidSource);
+    if (raw.length > TRY_ON_MAX_SOURCE_BYTES) throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
 
     try {
       return await sharp(raw, { limitInputPixels: 40_000_000 })
@@ -106,20 +101,22 @@ export class TryOnService {
         .png()
         .toBuffer();
     } catch {
-      throw new BadRequestException(TRY_ON_ERRORS.invalidSource);
+      throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
     }
   }
 
   private asHttpError(error: unknown): Error {
-    if (error instanceof BadGatewayException || error instanceof BadRequestException) return error;
+    // A coded error already carries the right status and message; pass it through
+    // rather than flattening it into a generic failure.
+    if (error instanceof AppError) return error;
     if (error instanceof APIError) {
       this.logger.error(`OpenAI image edit failed (${error.status}): ${error.message}`);
       if (error.status === 401 || error.status === 403) {
-        return new ServiceUnavailableException(TRY_ON_ERRORS.credentials);
+        return AppError.serviceUnavailable('AI_CREDENTIALS', TRY_ON_ERRORS.credentials);
       }
-      return new BadGatewayException(error.message || TRY_ON_ERRORS.generationFailed);
+      return AppError.badGateway('AI_FAILED', error.message || TRY_ON_ERRORS.generationFailed);
     }
     this.logger.error(`AI look generation failed: ${error instanceof Error ? error.message : String(error)}`);
-    return new BadGatewayException(TRY_ON_ERRORS.generationFailed);
+    return AppError.badGateway('AI_FAILED', TRY_ON_ERRORS.generationFailed);
   }
 }

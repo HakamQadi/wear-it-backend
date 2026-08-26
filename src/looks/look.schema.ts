@@ -14,6 +14,7 @@ export class LookItem {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true }) itemId!: Types.ObjectId;
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true }) typeId!: Types.ObjectId;
   @Prop({ required: true }) typeName!: string;
+  @Prop({ default: '' }) typeNameAr!: string;
   @Prop({ required: true }) name!: string;
   @Prop({ required: true }) imageUrl!: string;
 }

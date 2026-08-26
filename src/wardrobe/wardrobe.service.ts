@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, isValidObjectId, Model, Types } from 'mongoose';
 import { ClothingTypesService } from '../clothing-types/clothing-types.service';
 import { StorageService } from '../uploads/storage.service';
 import { CreateWardrobeItemDto, UpdateWardrobeItemDto } from './wardrobe.dto';
 import { WardrobeItem } from './wardrobe-item.schema';
+import { AppError } from '../common/errors/app-error';
 
 export interface WardrobeQuery {
   typeId?: string;
@@ -34,20 +35,20 @@ export class WardrobeService {
     }
     return this.itemModel
       .find(filter)
-      .populate('typeId', 'name slug isActive sortOrder')
+      .populate('typeId', 'name nameAr slug isActive sortOrder')
       .sort({ createdAt: -1 })
       .lean()
       .exec();
   }
 
   async findOne(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Wardrobe item not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     const item = await this.itemModel
       .findOne({ _id: id, userId: new Types.ObjectId(userId) })
-      .populate('typeId', 'name slug isActive sortOrder')
+      .populate('typeId', 'name nameAr slug isActive sortOrder')
       .lean()
       .exec();
-    if (!item) throw new NotFoundException('Wardrobe item not found');
+    if (!item) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     return item;
   }
 
@@ -62,21 +63,21 @@ export class WardrobeService {
   }
 
   async update(userId: string, id: string, dto: UpdateWardrobeItemDto) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Wardrobe item not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     if (dto.typeId) await this.clothingTypes.findActiveById(dto.typeId);
     const previous = await this.itemModel
       .findOneAndUpdate({ _id: id, userId: new Types.ObjectId(userId) }, dto, { runValidators: true })
       .lean()
       .exec();
-    if (!previous) throw new NotFoundException('Wardrobe item not found');
+    if (!previous) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     if (dto.imageUrl && dto.imageUrl !== previous.imageUrl) await this.storage.releaseIfUnused(previous.imageUrl);
     return this.findOne(userId, id);
   }
 
   async remove(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Wardrobe item not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     const deleted = await this.itemModel.findOneAndDelete({ _id: id, userId: new Types.ObjectId(userId) }).lean().exec();
-    if (!deleted) throw new NotFoundException('Wardrobe item not found');
+    if (!deleted) throw AppError.notFound('ITEM_NOT_FOUND', 'Wardrobe item not found');
     await this.storage.releaseIfUnused(deleted.imageUrl);
     return { deleted: true };
   }

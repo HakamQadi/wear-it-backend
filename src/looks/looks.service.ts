@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { PhotosService } from '../photos/photos.service';
@@ -7,11 +7,12 @@ import { StorageService } from '../uploads/storage.service';
 import { WardrobeItem } from '../wardrobe/wardrobe-item.schema';
 import { GenerateLookDto } from './look.dto';
 import { Look, LookItem } from './look.schema';
+import { AppError } from '../common/errors/app-error';
 
 /** Shape of a wardrobe item once its clothing type has been populated. */
 type PopulatedItem = Omit<WardrobeItem, 'typeId'> & {
   _id: Types.ObjectId;
-  typeId: { _id: Types.ObjectId; name: string; slug: string; sortOrder: number } | null;
+  typeId: { _id: Types.ObjectId; name: string; nameAr?: string; slug: string; sortOrder: number } | null;
 };
 
 @Injectable()
@@ -36,26 +37,26 @@ export class LooksService {
   }
 
   async findOne(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Look not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('LOOK_NOT_FOUND', 'Look not found');
     const look = await this.lookModel.findOne({ _id: id, userId: new Types.ObjectId(userId) }).lean().exec();
-    if (!look) throw new NotFoundException('Look not found');
+    if (!look) throw AppError.notFound('LOOK_NOT_FOUND', 'Look not found');
     return look;
   }
 
   async remove(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Look not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('LOOK_NOT_FOUND', 'Look not found');
     const deleted = await this.lookModel
       .findOneAndDelete({ _id: id, userId: new Types.ObjectId(userId) })
       .lean()
       .exec();
-    if (!deleted) throw new NotFoundException('Look not found');
+    if (!deleted) throw AppError.notFound('LOOK_NOT_FOUND', 'Look not found');
     await this.storage.releaseIfUnused(deleted.resultImageUrl);
     return { deleted: true };
   }
 
   async generate(userId: string, dto: GenerateLookDto) {
     if (this.generating.has(userId)) {
-      throw new HttpException('A look is already being generated. Wait for it to finish.', HttpStatus.TOO_MANY_REQUESTS);
+      throw AppError.tooManyRequests('LOOK_IN_PROGRESS', 'A look is already being generated. Wait for it to finish.');
     }
     this.generating.add(userId);
     try {
@@ -73,6 +74,7 @@ export class LooksService {
       itemId: item._id,
       typeId: item.typeId!._id,
       typeName: item.typeId!.name,
+      typeNameAr: item.typeId!.nameAr || item.typeId!.name,
       name: item.name,
       imageUrl: item.imageUrl,
     }));
@@ -103,21 +105,25 @@ export class LooksService {
   private async resolveItems(userId: string, itemIds: string[]): Promise<PopulatedItem[]> {
     const unique = [...new Set(itemIds)];
     if (unique.length !== itemIds.length) {
-      throw new BadRequestException('The same wardrobe item was selected more than once');
+      throw AppError.badRequest('ITEM_DUPLICATE', 'The same wardrobe item was selected more than once');
     }
 
     const items = (await this.itemModel
       .find({ _id: { $in: unique.map((id) => new Types.ObjectId(id)) }, userId: new Types.ObjectId(userId) })
-      .populate('typeId', 'name slug sortOrder')
+      .populate('typeId', 'name nameAr slug sortOrder')
       .lean()
       .exec()) as unknown as PopulatedItem[];
 
     if (items.length !== unique.length) {
-      throw new NotFoundException('One or more selected items are not in your closet');
+      throw AppError.notFound('ITEM_NOT_YOURS', 'One or more selected items are not in your closet');
     }
     const untyped = items.find((item) => !item.typeId);
     if (untyped) {
-      throw new BadRequestException(`"${untyped.name}" has no clothing type any more. Edit the item and pick a type.`);
+      throw AppError.badRequest(
+        'ITEM_NO_TYPE',
+        `"${untyped.name}" has no clothing type any more. Edit the item and pick a type.`,
+        { name: untyped.name },
+      );
     }
 
     const byType = new Map<string, string[]>();
@@ -128,8 +134,10 @@ export class LooksService {
     const clash = [...byType.entries()].find(([, names]) => names.length > 1);
     if (clash) {
       const [typeName, names] = clash;
-      throw new BadRequestException(
+      throw AppError.badRequest(
+        'ITEM_TYPE_CLASH',
         `A look can only include one ${typeName}. You selected ${names.length}: ${names.join(', ')}.`,
+        { type: typeName, count: names.length, names: names.join(', ') },
       );
     }
 

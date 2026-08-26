@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { StorageService } from '../uploads/storage.service';
 import { CreateUserPhotoDto, UpdateUserPhotoDto } from './photo.dto';
 import { UserPhoto } from './user-photo.schema';
+import { AppError } from '../common/errors/app-error';
 
 @Injectable()
 export class PhotosService {
@@ -21,9 +22,9 @@ export class PhotosService {
   }
 
   async findOne(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Photo not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
     const photo = await this.photoModel.findOne({ _id: id, userId: new Types.ObjectId(userId) }).lean().exec();
-    if (!photo) throw new NotFoundException('Photo not found');
+    if (!photo) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
     return photo;
   }
 
@@ -42,22 +43,22 @@ export class PhotosService {
   }
 
   async update(userId: string, id: string, dto: UpdateUserPhotoDto) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Photo not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
     const owner = new Types.ObjectId(userId);
     if (dto.isDefault === true) await this.clearDefault(owner);
     const updated = await this.photoModel
       .findOneAndUpdate({ _id: id, userId: owner }, dto, { new: true, runValidators: true })
       .lean()
       .exec();
-    if (!updated) throw new NotFoundException('Photo not found');
+    if (!updated) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
     return updated;
   }
 
   async remove(userId: string, id: string) {
-    if (!isValidObjectId(id)) throw new NotFoundException('Photo not found');
+    if (!isValidObjectId(id)) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
     const owner = new Types.ObjectId(userId);
     const deleted = await this.photoModel.findOneAndDelete({ _id: id, userId: owner }).lean().exec();
-    if (!deleted) throw new NotFoundException('Photo not found');
+    if (!deleted) throw AppError.notFound('PHOTO_NOT_FOUND', 'Photo not found');
 
     if (deleted.isDefault) {
       const next = await this.photoModel.findOne({ userId: owner }).sort({ createdAt: -1 }).exec();
