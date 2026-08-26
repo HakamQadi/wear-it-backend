@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../auth/user.schema';
 import { ClothingType, ClothingTypeSchema } from '../clothing-types/clothing-type.schema';
 import { SiteContent, SiteContentSchema } from '../content/content.schema';
+import { Look, LookSchema } from '../looks/look.schema';
 import { SeedService } from './seed.service';
 
 @Module({
@@ -11,6 +12,7 @@ import { SeedService } from './seed.service';
       { name: User.name, schema: UserSchema },
       { name: ClothingType.name, schema: ClothingTypeSchema },
       { name: SiteContent.name, schema: SiteContentSchema },
+      { name: Look.name, schema: LookSchema },
     ]),
   ],
   providers: [SeedService],

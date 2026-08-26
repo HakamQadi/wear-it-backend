@@ -85,7 +85,15 @@ The API stays language-neutral and lets the client decide what to show.
   `PATCH /api/content` merges per language, so saving Arabic alone never blanks the English
   copy. Documents written before the site was bilingual hold a plain string; those are read
   as the copy for both languages until an admin edits them, so no migration script is needed.
-- **Clothing types** carry `name` and `nameAr`. `nameAr` is optional and falls back to `name`.
+- **Clothing types** carry `name` and `nameAr`. Both are required when creating one, so no
+  new type can reach members untranslated; `nameAr` stays optional on update and falls back
+  to `name` if it is ever empty.
+
+  Databases created before Arabic names existed are repaired on startup: the seed fills in
+  `nameAr` for the starter types and the Arabic label on look snapshots that predate it. It
+  only ever writes where the field is empty, so an admin's own wording is never overwritten
+  and it is safe on every boot. A type the admin invented gets a warning in the log rather
+  than a guess — add its Arabic name in the CMS.
 - **Errors** carry a stable `code` alongside their English `message`, plus `params` for the
   values a translated sentence interpolates:
 

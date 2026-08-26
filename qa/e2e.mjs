@@ -156,10 +156,30 @@ async function run() {
     JSON.stringify(publicTypes.data.slice(0, 2).map((type) => [type.slug, type.nameAr])),
   );
 
-  const badSlug = await call('/clothing-types', { method: 'POST', token: adminToken, body: { name: 'Bad Slug', slug: 'Not A Slug' } });
+  const noArabic = await call('/clothing-types', {
+    method: 'POST',
+    token: adminToken,
+    body: { name: 'No Arabic', slug: `no-arabic-${stamp}` },
+  });
+  check('a new clothing type cannot be created without an Arabic name', noArabic.status === 400, `status ${noArabic.status}`);
+  check(
+    'the rejection names the missing field',
+    /nameAr/.test(messageOf(noArabic.data)),
+    messageOf(noArabic.data),
+  );
+
+  const badSlug = await call('/clothing-types', {
+    method: 'POST',
+    token: adminToken,
+    body: { name: 'Bad Slug', nameAr: 'معرّف خاطئ', slug: 'Not A Slug' },
+  });
   check('invalid slug is rejected', badSlug.status === 400, `status ${badSlug.status}`);
 
-  const dupSlug = await call('/clothing-types', { method: 'POST', token: adminToken, body: { name: 'Another', slug: `qa-cape-${stamp}` } });
+  const dupSlug = await call('/clothing-types', {
+    method: 'POST',
+    token: adminToken,
+    body: { name: 'Another', nameAr: 'أخرى', slug: `qa-cape-${stamp}` },
+  });
   check('duplicate slug is rejected', dupSlug.status === 409, `status ${dupSlug.status}`);
 
   const hidden = await call(`/clothing-types/${capeId}`, { method: 'PATCH', token: adminToken, body: { isActive: false } });
@@ -324,6 +344,11 @@ async function run() {
   check('the look stores a result image', /^\/uploads\/look-/.test(look.data?.resultImageUrl || ''), look.data?.resultImageUrl);
   check('the result file exists on disk', existsSync(join(UPLOADS, (look.data?.resultImageUrl || '').split('/').pop() || 'missing')));
   check('the look snapshots all three garments', look.data?.items?.length === 3, `count ${look.data?.items?.length}`);
+  check(
+    'the look snapshots the Arabic type label too',
+    look.data?.items?.every((entry) => /[\u0600-\u06FF]/.test(entry.typeNameAr || '')),
+    JSON.stringify(look.data?.items?.map((entry) => entry.typeNameAr)),
+  );
   const parts = await fetch('http://127.0.0.1:4999/__parts').then((response) => response.json()).catch(() => null);
   check(
     'the person photo and all three garments reach the image API as separate parts',
