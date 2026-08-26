@@ -7,8 +7,11 @@
     "start:dev": "nest start --watch",
     "build": "nest build",
     "start:prod": "node dist/main.js",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "test": "jest --runInBand"
+    "lint": "eslint \"src/**/*.ts\" \"qa/**/*.mjs\"",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "qa:stub": "node qa/openai-stub.mjs",
+    "qa:e2e": "node qa/e2e.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -41,10 +44,12 @@
     "@types/node": "^24.0.0",
     "@types/passport-jwt": "^4.0.1",
     "eslint": "^9.0.0",
+    "globals": "^17.11.0",
     "jest": "^30.0.0",
     "source-map-support": "^0.5.21",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.68.0"
   }
 }

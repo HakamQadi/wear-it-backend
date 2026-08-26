@@ -1,24 +1,44 @@
-import { BadRequestException, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { randomUUID } from 'crypto';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../common/types/jwt-payload';
+import { RemoteImageService } from './remote-image.service';
+import { ImportImageDto } from './uploads.dto';
+import { UPLOAD_ERROR, UPLOAD_FIELD, UPLOAD_MAX_BYTES, UPLOAD_MIME_EXTENSIONS, UPLOADS_DIRECTORY } from './uploads.constants';
 
-const allowed = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+@UseGuards(JwtAuthGuard)
 @Controller('uploads')
 export class UploadsController {
-  @UseGuards(JwtAuthGuard)
+  constructor(private readonly remoteImages: RemoteImageService) {}
+
+  /** Upload straight from the member's device. */
   @Post('image')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: './uploads',
-      filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extname(file.originalname).toLowerCase()}`),
+  @UseInterceptors(
+    FileInterceptor(UPLOAD_FIELD, {
+      storage: diskStorage({
+        destination: UPLOADS_DIRECTORY,
+        // Random UUID names: upload URLs are unguessable capability links.
+        filename: (_request, file, callback) =>
+          callback(null, `${randomUUID()}${UPLOAD_MIME_EXTENSIONS[file.mimetype] ?? '.png'}`),
+      }),
+      limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 },
+      fileFilter: (_request, file, callback) => callback(null, Boolean(UPLOAD_MIME_EXTENSIONS[file.mimetype])),
     }),
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => cb(null, allowed.has(extname(file.originalname).toLowerCase())),
-  }))
+  )
   upload(@UploadedFile() file?: Express.Multer.File) {
-    if (!file) throw new BadRequestException('A PNG, JPG, JPEG or WEBP image is required');
+    if (!file) throw new BadRequestException(UPLOAD_ERROR);
     return { url: `/uploads/${file.filename}` };
+  }
+
+  /**
+   * Import from a link. The image is downloaded here and saved as a normal upload, so the
+   * caller gets back the same kind of /uploads/... path a device upload produces.
+   */
+  @Post('from-url')
+  importFromUrl(@CurrentUser() user: JwtPayload, @Body() dto: ImportImageDto) {
+    return this.remoteImages.importFromUrl(dto.url, user.sub);
   }
 }

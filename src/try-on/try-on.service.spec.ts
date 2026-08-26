@@ -1,7 +1,6 @@
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Readable } from 'stream';
-import { ProductsService } from '../products/products.service';
-import { TRY_ON_BASE_PROMPT } from './try-on.constants';
+import sharp from 'sharp';
 import { TryOnService } from './try-on.service';
 
 jest.mock('openai', () => {
@@ -16,79 +15,94 @@ jest.mock('openai', () => {
 });
 
 jest.mock('fs/promises', () => {
+  const readFile = jest.fn();
   const writeFile = jest.fn();
   return {
-    ...jest.requireActual<typeof import('fs/promises')>('fs/promises'),
+    __esModule: true,
+    __mockReadFile: readFile,
     __mockWriteFile: writeFile,
     mkdir: jest.fn().mockResolvedValue(undefined),
+    readFile,
     writeFile,
+    unlink: jest.fn().mockResolvedValue(undefined),
   };
 });
 
 const { __mockImagesEdit: mockImagesEdit } = jest.requireMock('openai') as { __mockImagesEdit: jest.Mock };
-const { __mockWriteFile: mockWriteFile } = jest.requireMock('fs/promises') as { __mockWriteFile: jest.Mock };
+const { __mockReadFile: mockReadFile, __mockWriteFile: mockWriteFile } = jest.requireMock('fs/promises') as {
+  __mockReadFile: jest.Mock;
+  __mockWriteFile: jest.Mock;
+};
 
-const referenceSvg = Buffer.from(`
-  <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
-    <rect width="256" height="256" fill="#8ea18f" />
-  </svg>
-`);
+const configured = () => new ConfigService({ OPENAI_API_KEY: 'test-api-key', OPENAI_IMAGE_MODEL: 'gpt-image-2' });
 
 describe('TryOnService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    global.fetch = jest.fn().mockResolvedValue(new Response(referenceSvg, {
-      status: 200,
-      headers: { 'content-type': 'image/svg+xml' },
-    }));
+  let png: Buffer;
+
+  beforeAll(async () => {
+    png = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#8ea18f' } }).png().toBuffer();
   });
 
-  it('sends the person, garment, and customer prompt to the image editor', async () => {
-    mockImagesEdit.mockResolvedValue({
-      data: [{ b64_json: Buffer.from('generated-image').toString('base64') }],
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReadFile.mockResolvedValue(png);
+  });
+
+  it('sends the person photo followed by every garment, in the given order', async () => {
+    mockImagesEdit.mockResolvedValue({ data: [{ b64_json: Buffer.from('generated').toString('base64') }] });
+    const service = new TryOnService(configured());
+
+    const result = await service.composeLook({
+      personImageUrl: '/uploads/me.png',
+      garments: [
+        { label: 'T-shirt', imageUrl: '/uploads/tee.png' },
+        { label: 'Pants', imageUrl: '/uploads/pants.png' },
+        { label: 'Jacket', imageUrl: '/uploads/jacket.png' },
+      ],
+      extraDirection: 'Keep my pose and background.',
     });
-    const productsService = {
-      findBySlug: jest.fn().mockResolvedValue({
-        tryOnOverlayUrl: 'https://example.test/garment.svg',
-        images: [],
+
+    const call = mockImagesEdit.mock.calls[0][0];
+    expect(call.image.map((file: { name: string }) => file.name)).toEqual([
+      'person.png',
+      'garment-1.png',
+      'garment-2.png',
+      'garment-3.png',
+    ]);
+    expect(call.prompt).toContain("Image 2 is the person's own T-shirt.");
+    expect(call.prompt).toContain("Image 3 is the person's own Pants.");
+    expect(call.prompt).toContain("Image 4 is the person's own Jacket.");
+    expect(call.prompt).toContain('all 3 garments listed above at the same time');
+    expect(call.prompt).toContain('Keep my pose and background.');
+    expect(mockWriteFile).toHaveBeenCalledWith(expect.stringMatching(/look-[\w-]+\.png$/), Buffer.from('generated'));
+    expect(result.imageUrl).toMatch(/^\/uploads\/look-[\w-]+\.png$/);
+  });
+
+  it('names a single garment without pluralising the instruction', async () => {
+    mockImagesEdit.mockResolvedValue({ data: [{ b64_json: Buffer.from('x').toString('base64') }] });
+    const service = new TryOnService(configured());
+
+    await service.composeLook({ personImageUrl: '/uploads/me.png', garments: [{ label: 'Dress', imageUrl: '/uploads/d.png' }] });
+
+    expect(mockImagesEdit.mock.calls[0][0].prompt).toContain('Dress the person in the garment listed above.');
+  });
+
+  it('refuses image sources that are not internal uploads', async () => {
+    const service = new TryOnService(configured());
+    await expect(
+      service.composeLook({
+        personImageUrl: 'https://attacker.test/ssrf.png',
+        garments: [{ label: 'T-shirt', imageUrl: '/uploads/tee.png' }],
       }),
-    } as unknown as ProductsService;
-    const service = new TryOnService(
-      new ConfigService({ OPENAI_API_KEY: 'test-api-key', OPENAI_IMAGE_MODEL: 'gpt-image-2' }),
-      productsService,
-    );
-    const personImage: Express.Multer.File = {
-      fieldname: 'personImage',
-      originalname: 'person.png',
-      encoding: '7bit',
-      mimetype: 'image/png',
-      size: referenceSvg.length,
-      destination: '',
-      filename: '',
-      path: '',
-      buffer: referenceSvg,
-      stream: Readable.from(referenceSvg),
-    };
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockImagesEdit).not.toHaveBeenCalled();
+  });
 
-    const result = await service.generate(personImage, {
-      productSlug: 'sage-cropped-hoodie',
-      prompt: 'Keep the same background and use a relaxed fit.',
-    });
-
-    expect(productsService.findBySlug).toHaveBeenCalledWith('sage-cropped-hoodie');
-    expect(mockImagesEdit).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gpt-image-2',
-      image: expect.arrayContaining([
-        expect.objectContaining({ name: 'person.png' }),
-        expect.objectContaining({ name: 'garment.png' }),
-      ]),
-      prompt: expect.stringContaining(TRY_ON_BASE_PROMPT),
-    }));
-    expect(mockImagesEdit.mock.calls[0][0].prompt).toContain('Keep the same background and use a relaxed fit.');
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      expect.stringMatching(/try-on-[\w-]+\.png$/),
-      Buffer.from('generated-image'),
-    );
-    expect(result.imageUrl).toMatch(/^\/uploads\/try-on-[\w-]+\.png$/);
+  it('reports a clear error when the API key is missing', async () => {
+    const service = new TryOnService(new ConfigService({}));
+    await expect(
+      service.composeLook({ personImageUrl: '/uploads/me.png', garments: [{ label: 'T-shirt', imageUrl: '/uploads/t.png' }] }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(service.isConfigured()).toBe(false);
   });
 });

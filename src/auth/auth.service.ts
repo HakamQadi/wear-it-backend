@@ -1,24 +1,62 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
-import { Admin } from './admin.schema';
-import { LoginDto } from './login.dto';
+import { JwtPayload } from '../common/types/jwt-payload';
+import { LoginDto, RegisterDto } from './auth.dto';
+import { User, UserDocument } from './user.schema';
+
+const BCRYPT_ROUNDS = 12;
+const DUPLICATE_KEY_CODE = 11000;
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(Admin.name) private readonly adminModel: Model<Admin>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly jwtService: JwtService,
   ) {}
 
+  async register(dto: RegisterDto) {
+    const email = dto.email.toLowerCase().trim();
+    if (await this.userModel.exists({ email })) {
+      throw new ConflictException('An account with this email already exists');
+    }
+    try {
+      const created = await this.userModel.create({
+        email,
+        name: dto.name.trim(),
+        passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
+        role: 'user',
+      });
+      return this.session(created);
+    } catch (error: unknown) {
+      if ((error as { code?: number }).code === DUPLICATE_KEY_CODE) {
+        throw new ConflictException('An account with this email already exists');
+      }
+      throw error;
+    }
+  }
+
   async login(dto: LoginDto) {
-    const admin = await this.adminModel.findOne({ email: dto.email.toLowerCase() }).exec();
-    if (!admin || !(await bcrypt.compare(dto.password, admin.passwordHash))) {
+    const user = await this.userModel.findOne({ email: dto.email.toLowerCase().trim() }).exec();
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid email or password');
     }
-    const accessToken = await this.jwtService.signAsync({ sub: admin._id.toString(), email: admin.email, role: 'admin' });
-    return { accessToken, admin: { id: admin._id, email: admin.email, name: admin.name } };
+    return this.session(user);
+  }
+
+  async me(payload: JwtPayload) {
+    const user = await this.userModel.findById(payload.sub).lean().exec();
+    if (!user) throw new NotFoundException('Account not found');
+    return { id: user._id.toString(), email: user.email, name: user.name, role: user.role };
+  }
+
+  private async session(user: UserDocument) {
+    const payload: JwtPayload = { sub: user._id.toString(), email: user.email, role: user.role };
+    return {
+      accessToken: await this.jwtService.signAsync(payload),
+      user: { id: payload.sub, email: user.email, name: user.name, role: user.role },
+    };
   }
 }

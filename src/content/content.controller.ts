@@ -1,10 +1,22 @@
 import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { UpdateContentDto } from './content.dto';
 import { ContentService } from './content.service';
+
 @Controller('content')
 export class ContentController {
   constructor(private readonly service: ContentService) {}
-  @Get() get() { return this.service.get(); }
-  @UseGuards(JwtAuthGuard) @Patch() update(@Body() dto: UpdateContentDto) { return this.service.update(dto); }
+
+  @Get()
+  get() {
+    return this.service.get();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard) @Roles('admin')
+  @Patch()
+  update(@Body() dto: UpdateContentDto) {
+    return this.service.update(dto);
+  }
 }

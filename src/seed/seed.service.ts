@@ -3,78 +3,81 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
-import { Admin } from '../auth/admin.schema';
-import { Category } from '../categories/category.schema';
+import { User } from '../auth/user.schema';
+import { ClothingType } from '../clothing-types/clothing-type.schema';
 import { SiteContent } from '../content/content.schema';
-import { Product } from '../products/product.schema';
+
+/** Ordered base layer first so generated looks layer garments naturally. */
+const DEFAULT_CLOTHING_TYPES = [
+  { name: 'T-shirt', slug: 't-shirt', description: 'Tees and short-sleeve tops.', sortOrder: 10 },
+  { name: 'Shirt', slug: 'shirt', description: 'Buttoned shirts and blouses.', sortOrder: 20 },
+  { name: 'Sweater', slug: 'sweater', description: 'Knitwear, hoodies and sweatshirts.', sortOrder: 30 },
+  { name: 'Dress', slug: 'dress', description: 'One-piece dresses.', sortOrder: 40 },
+  { name: 'Pants', slug: 'pants', description: 'Trousers, jeans and chinos.', sortOrder: 50 },
+  { name: 'Skirt', slug: 'skirt', description: 'Skirts of any length.', sortOrder: 60 },
+  { name: 'Shorts', slug: 'shorts', description: 'Short-length bottoms.', sortOrder: 70 },
+  { name: 'Jacket', slug: 'jacket', description: 'Jackets, blazers and light layers.', sortOrder: 80 },
+  { name: 'Coat', slug: 'coat', description: 'Heavier outerwear.', sortOrder: 90 },
+  { name: 'Suit', slug: 'suit', description: 'Full suits and tailored sets.', sortOrder: 100 },
+  { name: 'Shoes', slug: 'shoes', description: 'Footwear of every kind.', sortOrder: 110 },
+  { name: 'Bag', slug: 'bag', description: 'Bags and backpacks.', sortOrder: 120 },
+  { name: 'Hat', slug: 'hat', description: 'Hats, caps and headwear.', sortOrder: 130 },
+  { name: 'Accessory', slug: 'accessory', description: 'Scarves, belts, jewellery and more.', sortOrder: 140 },
+];
 
 @Injectable()
 export class SeedService implements OnModuleInit {
   private readonly logger = new Logger(SeedService.name);
+
   constructor(
-    @InjectModel(Admin.name) private readonly admins: Model<Admin>,
-    @InjectModel(Category.name) private readonly categories: Model<Category>,
-    @InjectModel(Product.name) private readonly products: Model<Product>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(ClothingType.name) private readonly types: Model<ClothingType>,
     @InjectModel(SiteContent.name) private readonly content: Model<SiteContent>,
     private readonly config: ConfigService,
   ) {}
 
   async onModuleInit() {
     await this.seedAdmin();
-    await this.seedStore();
+    await this.seedClothingTypes();
+    await this.seedContent();
   }
 
   private async seedAdmin() {
     const email = this.config.get<string>('ADMIN_EMAIL', 'admin@wearit.local').toLowerCase();
-    if (await this.admins.exists({ email })) return;
+    if (await this.users.exists({ email })) return;
     const password = this.config.get<string>('ADMIN_PASSWORD', 'WearIt123!');
-    await this.admins.create({ email, passwordHash: await bcrypt.hash(password, 12), name: 'Wear It Admin' });
+    await this.users.create({
+      email,
+      name: 'Wear It Admin',
+      passwordHash: await bcrypt.hash(password, 12),
+      role: 'admin',
+    });
     this.logger.log(`Created initial admin: ${email}`);
   }
 
-  private async seedStore() {
-    const count = await this.categories.countDocuments();
-    if (count === 0) {
-      await this.categories.insertMany([
-        { name: 'Women', slug: 'women', description: 'Modern everyday pieces and elevated essentials.' },
-        { name: 'Men', slug: 'men', description: 'Clean fits, relaxed layers and wardrobe staples.' },
-        { name: 'Outerwear', slug: 'outerwear', description: 'Light jackets and statement layers.' },
-      ]);
-    }
-    const categoryList = await this.categories.find().lean().exec();
-    const category = (slug: string) => categoryList.find((item) => item.slug === slug)!._id;
+  /** Seeds a starter taxonomy only while the collection is empty, so admin edits survive restarts. */
+  private async seedClothingTypes() {
+    if ((await this.types.estimatedDocumentCount().exec()) > 0) return;
+    await this.types.insertMany(DEFAULT_CLOTHING_TYPES);
+    this.logger.log(`Seeded ${DEFAULT_CLOTHING_TYPES.length} clothing types`);
+  }
 
-    if ((await this.products.countDocuments()) === 0) {
-      await this.products.insertMany([
-        {
-          name: 'Sand Oversized Tee', slug: 'sand-oversized-tee', description: 'A heavyweight oversized tee with a soft drape, dropped shoulders and a clean everyday silhouette.',
-          categoryId: category('men'), price: 28, compareAtPrice: 35, images: ['/demo/sand-tee.svg'], tryOnOverlayUrl: '/demo/sand-tee-overlay.svg',
-          sizes: ['S', 'M', 'L', 'XL'], colors: ['Sand', 'Black'], stock: 38, featured: true, tags: ['tee', 'oversized', 'minimal'],
+  private async seedContent() {
+    await this.content.updateOne(
+      { key: 'main' },
+      {
+        $setOnInsert: {
+          key: 'main',
+          brandName: 'Wear It',
+          heroTitle: 'Your closet, digitised.',
+          heroSubtitle:
+            'Photograph what you already own, save it to your virtual wardrobe, then let AI show you wearing any combination of it.',
+          heroCta: 'Build my closet',
+          announcement: 'Plan tomorrow’s outfit tonight — from the clothes you already own.',
+          footerText: 'A digital wardrobe that shows you the outfit before you wear it.',
         },
-        {
-          name: 'Sage Cropped Hoodie', slug: 'sage-cropped-hoodie', description: 'A soft brushed hoodie with a modern cropped shape, relaxed sleeves and a comfortable structured hood.',
-          categoryId: category('women'), price: 46, images: ['/demo/sage-hoodie.svg'], tryOnOverlayUrl: '/demo/sage-hoodie-overlay.svg',
-          sizes: ['XS', 'S', 'M', 'L'], colors: ['Sage', 'Cream'], stock: 24, featured: true, tags: ['hoodie', 'cropped', 'sage'],
-        },
-        {
-          name: 'Midnight Bomber', slug: 'midnight-bomber', description: 'A clean lightweight bomber jacket with subtle volume and understated hardware for easy layering.',
-          categoryId: category('outerwear'), price: 72, compareAtPrice: 89, images: ['/demo/midnight-bomber.svg'], tryOnOverlayUrl: '/demo/midnight-bomber-overlay.svg',
-          sizes: ['S', 'M', 'L', 'XL'], colors: ['Midnight'], stock: 17, featured: true, tags: ['jacket', 'bomber', 'outerwear'],
-        },
-        {
-          name: 'Cloud Rib Top', slug: 'cloud-rib-top', description: 'A fitted ribbed long-sleeve top with a soft neckline and stretch finish designed for everyday layering.',
-          categoryId: category('women'), price: 32, images: ['/demo/cloud-rib-top.svg'], tryOnOverlayUrl: '/demo/cloud-rib-top-overlay.svg',
-          sizes: ['XS', 'S', 'M', 'L'], colors: ['Cloud', 'Charcoal'], stock: 31, featured: false, tags: ['top', 'ribbed', 'basic'],
-        },
-      ]);
-    }
-
-    await this.content.updateOne({ key: 'main' }, {
-      $setOnInsert: {
-        key: 'main', brandName: 'Wear It', heroTitle: 'See the fit before it arrives.',
-        heroSubtitle: 'Shop modern essentials, upload a photo, and preview the silhouette on you before adding it to your wardrobe.',
-        heroCta: 'Shop the collection', announcement: 'Free delivery on orders over $100', footerText: 'Modern clothing with a more confident way to choose.',
       },
-    }, { upsert: true });
+      { upsert: true },
+    );
   }
 }
