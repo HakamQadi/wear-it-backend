@@ -11,7 +11,8 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "qa:stub": "node qa/openai-stub.mjs",
-    "qa:e2e": "node qa/e2e.mjs"
+    "qa:e2e": "node qa/e2e.mjs",
+    "media:migrate": "node --env-file=.env scripts/migrate-media-to-imagekit.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -26,6 +27,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "helmet": "^8.1.0",
+    "imagekit": "^6.0.0",
     "mongoose": "^8.18.0",
     "openai": "^7.5.0",
     "passport": "^0.7.0",

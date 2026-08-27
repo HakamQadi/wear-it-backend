@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import { expectAppError } from '../common/errors/expect-app-error';
 import { ConfigService } from '@nestjs/config';
 import sharp from 'sharp';
+import { StorageService } from '../uploads/storage.service';
 import { TryOnService } from './try-on.service';
 
 jest.mock('openai', () => {
@@ -15,27 +16,16 @@ jest.mock('openai', () => {
   };
 });
 
-jest.mock('fs/promises', () => {
-  const readFile = jest.fn();
-  const writeFile = jest.fn();
-  return {
-    __esModule: true,
-    __mockReadFile: readFile,
-    __mockWriteFile: writeFile,
-    mkdir: jest.fn().mockResolvedValue(undefined),
-    readFile,
-    writeFile,
-    unlink: jest.fn().mockResolvedValue(undefined),
-  };
-});
-
 const { __mockImagesEdit: mockImagesEdit } = jest.requireMock('openai') as { __mockImagesEdit: jest.Mock };
-const { __mockReadFile: mockReadFile, __mockWriteFile: mockWriteFile } = jest.requireMock('fs/promises') as {
-  __mockReadFile: jest.Mock;
-  __mockWriteFile: jest.Mock;
-};
 
 const configured = () => new ConfigService({ OPENAI_API_KEY: 'test-api-key', OPENAI_IMAGE_MODEL: 'gpt-image-2' });
+
+/** Storage is exercised by its own suite; here it only has to hand bytes in and out. */
+const mockRead = jest.fn();
+const mockSave = jest.fn(async (_buffer: Buffer, extension: string, prefix = '') => ({
+  url: `/uploads/${prefix}00000000-0000-4000-8000-000000000000${extension}`,
+}));
+const storage = () => ({ read: mockRead, save: mockSave }) as unknown as StorageService;
 
 describe('TryOnService', () => {
   let png: Buffer;
@@ -46,12 +36,12 @@ describe('TryOnService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockReadFile.mockResolvedValue(png);
+    mockRead.mockResolvedValue(png);
   });
 
   it('sends the person photo followed by every garment, in the given order', async () => {
     mockImagesEdit.mockResolvedValue({ data: [{ b64_json: Buffer.from('generated').toString('base64') }] });
-    const service = new TryOnService(configured());
+    const service = new TryOnService(configured(), storage());
 
     const result = await service.composeLook({
       personImageUrl: '/uploads/me.png',
@@ -75,13 +65,13 @@ describe('TryOnService', () => {
     expect(call.prompt).toContain("Image 4 is the person's own Jacket.");
     expect(call.prompt).toContain('all 3 garments listed above at the same time');
     expect(call.prompt).toContain('Keep my pose and background.');
-    expect(mockWriteFile).toHaveBeenCalledWith(expect.stringMatching(/look-[\w-]+\.png$/), Buffer.from('generated'));
+    expect(mockSave).toHaveBeenCalledWith(Buffer.from('generated'), '.png', 'look-');
     expect(result.imageUrl).toMatch(/^\/uploads\/look-[\w-]+\.png$/);
   });
 
   it('names a single garment without pluralising the instruction', async () => {
     mockImagesEdit.mockResolvedValue({ data: [{ b64_json: Buffer.from('x').toString('base64') }] });
-    const service = new TryOnService(configured());
+    const service = new TryOnService(configured(), storage());
 
     await service.composeLook({ personImageUrl: '/uploads/me.png', garments: [{ label: 'Dress', imageUrl: '/uploads/d.png' }] });
 
@@ -89,7 +79,7 @@ describe('TryOnService', () => {
   });
 
   it('refuses image sources that are not internal uploads', async () => {
-    const service = new TryOnService(configured());
+    const service = new TryOnService(configured(), storage());
     await expectAppError(
       service.composeLook({
         personImageUrl: 'https://attacker.test/ssrf.png',
@@ -102,7 +92,7 @@ describe('TryOnService', () => {
   });
 
   it('reports a clear error when the API key is missing', async () => {
-    const service = new TryOnService(new ConfigService({}));
+    const service = new TryOnService(new ConfigService({}), storage());
     await expectAppError(
       service.composeLook({ personImageUrl: '/uploads/me.png', garments: [{ label: 'T-shirt', imageUrl: '/uploads/t.png' }] }),
       HttpStatus.SERVICE_UNAVAILABLE,

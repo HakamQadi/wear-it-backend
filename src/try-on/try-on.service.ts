@@ -1,12 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppError } from '../common/errors/app-error';
-import { randomUUID } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
 import OpenAI, { APIError, toFile } from 'openai';
-import { join } from 'path';
 import sharp from 'sharp';
-import { StorageService, UPLOADS_DIRECTORY } from '../uploads/storage.service';
+import { StorageService } from '../uploads/storage.service';
 import {
   buildTryOnPrompt,
   TRY_ON_DEFAULT_MODEL,
@@ -33,7 +30,10 @@ export interface ComposeLookInput {
 export class TryOnService {
   private readonly logger = new Logger(TryOnService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly storage: StorageService,
+  ) {}
 
   /** True when the backend has credentials to reach the image model. */
   isConfigured(): boolean {
@@ -73,22 +73,23 @@ export class TryOnService {
       const generatedBase64 = response.data?.[0]?.b64_json;
       if (!generatedBase64) throw AppError.badGateway('AI_FAILED', TRY_ON_ERRORS.generationFailed);
 
-      const filename = `look-${randomUUID()}.${TRY_ON_OUTPUT_FORMAT}`;
-      await mkdir(UPLOADS_DIRECTORY, { recursive: true });
-      await writeFile(join(UPLOADS_DIRECTORY, filename), Buffer.from(generatedBase64, 'base64'));
-      return { imageUrl: `/uploads/${filename}` };
+      const stored = await this.storage.save(
+        Buffer.from(generatedBase64, 'base64'),
+        `.${TRY_ON_OUTPUT_FORMAT}`,
+        'look-',
+      );
+      return { imageUrl: stored.url };
     } catch (error: unknown) {
       throw this.asHttpError(error);
     }
   }
 
   private async loadImage(url: string, width: number, height: number): Promise<Buffer> {
-    const path = StorageService.resolveLocalPath(url);
-    if (!path) throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
+    if (!StorageService.resolveFilename(url)) throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
 
     let raw: Buffer;
     try {
-      raw = await readFile(path);
+      raw = await this.storage.read(url);
     } catch {
       throw AppError.badRequest('AI_INVALID_SOURCE', TRY_ON_ERRORS.invalidSource);
     }

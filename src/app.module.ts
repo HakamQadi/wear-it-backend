@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { UPLOADS_DIRECTORY } from './uploads/uploads.constants';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -24,7 +22,6 @@ import { WardrobeModule } from './wardrobe/wardrobe.module';
         uri: config.get<string>('MONGODB_URI', 'mongodb://localhost:27017/wear_it'),
       }),
     }),
-    ServeStaticModule.forRoot({ rootPath: UPLOADS_DIRECTORY, serveRoot: '/uploads' }),
     AuthModule,
     ClothingTypesModule,
     WardrobeModule,

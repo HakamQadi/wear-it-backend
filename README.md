@@ -108,14 +108,22 @@ The API stays language-neutral and lets the client decide what to show.
 
 ## Privacy and storage
 
-- Personal photos, item photos and generated looks live in `UPLOADS_DIR` (default `uploads/`)
-  under random UUID names,
-  and are served as unguessable capability URLs. Anyone holding a URL can fetch that file, so
-  treat the paths as secrets and put the directory behind signed URLs before production.
+- Personal photos, item photos and generated looks are stored under random UUID names and
+  served as unguessable capability URLs. Anyone holding a URL can fetch that file, so treat the
+  paths as secrets and put the media behind signed URLs before production.
+- Two storage drivers. With `IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY` and
+  `IMAGEKIT_URL_ENDPOINT` all set, media goes to ImageKit (folder `IMAGEKIT_FOLDER`, default
+  `wear-it`); otherwise it is written to `UPLOADS_DIR` (default `uploads/`). Either way the
+  stored value is `/uploads/<filename>` and `GET /uploads/<filename>` answers — serving the
+  file from disk, or redirecting to the CDN copy. Copy existing files across before switching:
+
+  ```bash
+  npm run media:migrate          # add -- --dry-run to see what it would upload
+  ```
 - Deleting a photo, item or look removes the underlying file once nothing else references it.
 - Item and photo URLs must be `/uploads/...` paths produced by this API. A member can still add
   an item from a link, but the image is downloaded once by `POST /uploads/from-url` and stored
-  locally; a remote address is never persisted or fetched later.
+  by whichever driver is configured; a member-supplied address is never persisted or fetched later.
 - Person photos are sent to the OpenAI image API at generation time.
 
 ## Testing

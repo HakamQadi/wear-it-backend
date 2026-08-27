@@ -1,11 +1,13 @@
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api');
+  // Stored media is addressed as /uploads/<filename> — the path the static mount serves
+  // and the one MediaController redirects to ImageKit — so it stays off the api prefix.
+  app.setGlobalPrefix('api', { exclude: [{ path: 'uploads/:filename', method: RequestMethod.GET }] });
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({
     origin: (process.env.FRONTEND_URL || 'http://localhost:3000').split(',').map((v) => v.trim()),
