@@ -8,6 +8,7 @@ import { ClothingTypesModule } from './clothing-types/clothing-types.module';
 import { ContentModule } from './content/content.module';
 import { LooksModule } from './looks/looks.module';
 import { PhotosModule } from './photos/photos.module';
+import { PlansModule } from './plans/plans.module';
 import { SeedModule } from './seed/seed.module';
 import { TryOnModule } from './try-on/try-on.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -27,6 +28,7 @@ import { WardrobeModule } from './wardrobe/wardrobe.module';
     WardrobeModule,
     PhotosModule,
     TryOnModule,
+    PlansModule,
     LooksModule,
     ContentModule,
     UploadsModule,

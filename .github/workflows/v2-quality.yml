@@ -1,0 +1,119 @@
+name: v2 quality
+
+on:
+  push:
+    branches: [v2]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          path: backend
+
+      - name: Checkout frontend v2
+        uses: actions/checkout@v4
+        with:
+          repository: HakamQadi/wear-it-frontend
+          ref: v2
+          path: frontend
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install, lint and build backend
+        working-directory: backend
+        run: |
+          npm install --no-package-lock
+          npm run lint
+          npm run build
+
+      - name: Start QA services
+        working-directory: backend
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/wear_it_ci
+          PORT: 4100
+          FRONTEND_URL: http://127.0.0.1:3005
+          JWT_SECRET: ci-only-secret
+          ADMIN_EMAIL: admin@wearit.local
+          ADMIN_PASSWORD: WearIt123!
+          OPENAI_API_KEY: stub
+          OPENAI_BASE_URL: http://127.0.0.1:4999/v1
+          IMAGE_IMPORT_ALLOW_LOOPBACK: 'true'
+          UPLOADS_DIR: ci-uploads
+          STRIPE_SECRET_KEY: sk_test_qa
+          STRIPE_WEBHOOK_SECRET: whsec_qa
+          STRIPE_API_BASE_URL: http://127.0.0.1:4998/v1
+        run: |
+          node qa/openai-stub.mjs > /tmp/openai-stub.log 2>&1 &
+          node qa/stripe-stub.mjs > /tmp/stripe-stub.log 2>&1 &
+          node dist/main.js > /tmp/backend.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4100/api/health >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/backend.log
+          exit 1
+
+      - name: Backend end-to-end QA
+        working-directory: backend
+        env:
+          API_URL: http://127.0.0.1:4100/api
+          UPLOADS_DIR: ci-uploads
+          STRIPE_WEBHOOK_SECRET: whsec_qa
+        run: |
+          npm run qa:e2e
+          npm run qa:billing
+
+      - name: Install, lint and build frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:4100/api
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+          npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end QA
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:4100/api
+          BASE_URL: http://127.0.0.1:3005
+          API_URL: http://127.0.0.1:4100/api
+          STRIPE_WEBHOOK_SECRET: whsec_qa
+        run: |
+          npm run start -- -p 3005 > /tmp/frontend.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:3005 >/dev/null && break
+            sleep 1
+          done
+          npm run qa:browser
+          node qa/billing-browser.mjs
+
+      - name: Print service logs on failure
+        if: failure()
+        run: |
+          cat /tmp/backend.log 2>/dev/null || true
+          cat /tmp/openai-stub.log 2>/dev/null || true
+          cat /tmp/stripe-stub.log 2>/dev/null || true
+          cat /tmp/frontend.log 2>/dev/null || true

@@ -11,7 +11,9 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "qa:stub": "node qa/openai-stub.mjs",
+    "qa:stripe-stub": "node qa/stripe-stub.mjs",
     "qa:e2e": "node qa/e2e.mjs",
+    "qa:billing": "node qa/billing-e2e.mjs",
     "media:migrate": "node --env-file=.env scripts/migrate-media-to-imagekit.mjs"
   },
   "dependencies": {
