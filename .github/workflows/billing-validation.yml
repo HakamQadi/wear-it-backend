@@ -16,7 +16,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: npm }
-      - run: npm ci
+      # The repository's existing package-lock predates npm 11's optional dependency
+      # resolution and is missing @emnapi entries used by sharp. No billing dependency was
+      # added, so use install in the clean runner and leave the product dependency set intact.
+      - run: npm install
       - run: npm run lint
       - run: npm test
       - run: npm run build
