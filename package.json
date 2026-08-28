@@ -12,46 +12,11 @@
     "test:watch": "jest --watch",
     "qa:stub": "node qa/openai-stub.mjs",
     "qa:e2e": "node qa/e2e.mjs",
-    "media:migrate": "node --env-file=.env scripts/migrate-media-to-imagekit.mjs"
+    "media:migrate": "node --env-file=.env scripts/migrate-media-to-imagekit.mjs",
+    "qa:billing": "node qa/billing-e2e.mjs",
+    "qa:stripe-stub": "node qa/stripe-stub.mjs",
+    "qa:billing:stripe": "node qa/billing-stripe-e2e.mjs"
   },
-  "dependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/config": "^4.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/jwt": "^11.0.0",
-    "@nestjs/mongoose": "^11.0.0",
-    "@nestjs/passport": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
-    "@nestjs/serve-static": "^5.0.0",
-    "bcryptjs": "^3.0.2",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.2",
-    "helmet": "^8.1.0",
-    "imagekit": "^6.0.0",
-    "mongoose": "^8.18.0",
-    "openai": "^7.5.0",
-    "passport": "^0.7.0",
-    "passport-jwt": "^4.0.1",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "sharp": "^0.35.3"
-  },
-  "devDependencies": {
-    "@nestjs/cli": "^11.0.0",
-    "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.0",
-    "@types/express": "^5.0.3",
-    "@types/jest": "^30.0.0",
-    "@types/multer": "^1.4.13",
-    "@types/node": "^24.0.0",
-    "@types/passport-jwt": "^4.0.1",
-    "eslint": "^9.0.0",
-    "globals": "^17.11.0",
-    "jest": "^30.0.0",
-    "source-map-support": "^0.5.21",
-    "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.0",
-    "typescript-eslint": "^8.68.0"
-  }
+  "dependencies": {"@nestjs/common":"^11.0.0","@nestjs/config":"^4.0.0","@nestjs/core":"^11.0.0","@nestjs/jwt":"^11.0.0","@nestjs/mongoose":"^11.0.0","@nestjs/passport":"^11.0.0","@nestjs/platform-express":"^11.0.0","@nestjs/serve-static":"^5.0.0","bcryptjs":"^3.0.2","class-transformer":"^0.5.1","class-validator":"^0.14.2","helmet":"^8.1.0","imagekit":"^6.0.0","mongoose":"^8.18.0","openai":"^7.5.0","passport":"^0.7.0","passport-jwt":"^4.0.1","reflect-metadata":"^0.2.2","rxjs":"^7.8.2","sharp":"^0.35.3"},
+  "devDependencies": {"@nestjs/cli":"^11.0.0","@nestjs/schematics":"^11.0.0","@nestjs/testing":"^11.0.0","@types/express":"^5.0.3","@types/jest":"^30.0.0","@types/multer":"^1.4.13","@types/node":"^24.0.0","@types/passport-jwt":"^4.0.1","eslint":"^9.0.0","globals":"^17.11.0","jest":"^30.0.0","source-map-support":"^0.5.21","ts-jest":"^29.4.0","ts-node":"^10.9.2","typescript":"^5.9.0","typescript-eslint":"^8.68.0"}
 }
