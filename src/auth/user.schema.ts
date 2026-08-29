@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { AccountRole } from '../common/types/jwt-payload';
+import { ACCOUNT_ROLES, AccountRole } from '../common/types/jwt-payload';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -15,7 +15,7 @@ export class User {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  @Prop({ type: String, enum: ['user', 'admin'], default: 'user' })
+  @Prop({ type: String, enum: ACCOUNT_ROLES, default: AccountRole.USER })
   role!: AccountRole;
 }
 

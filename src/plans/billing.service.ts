@@ -2,20 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AppError } from '../common/errors/app-error';
+import { PlanTier, SubscriptionProvider, SubscriptionStatus } from './plan.enums';
 import { Plan } from './plan.schema';
 import { PlansService } from './plans.service';
 import { StripeService, StripeSubscription } from './stripe.service';
 import { Subscription } from './subscription.schema';
-
-function addMonth(value: Date) {
-  const result = new Date(value);
-  const day = result.getUTCDate();
-  result.setUTCDate(1);
-  result.setUTCMonth(result.getUTCMonth() + 1);
-  const lastDay = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
-  result.setUTCDate(Math.min(day, lastDay));
-  return result;
-}
+import { addMonth } from './subscription.utils';
 
 @Injectable()
 export class BillingService {
@@ -31,7 +23,14 @@ export class BillingService {
     const plan = await this.plansModel.findById(subscription.planId).lean().exec();
     if (!plan) throw AppError.notFound('PLAN_NOT_FOUND', 'Plan not found');
     return {
-      subscription,
+      subscription: {
+        status: subscription.status,
+        provider: subscription.provider,
+        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        generationCount: subscription.generationCount,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      },
       plan,
       used: subscription.generationCount,
       limit: plan.generationLimit,
@@ -64,13 +63,16 @@ export class BillingService {
 
   async checkout(userId: string, email: string) {
     const current = await this.ensureCurrentPeriod(userId);
-    if (current.provider === 'stripe' && current.status === 'past_due') {
+    if (current.provider === SubscriptionProvider.STRIPE && current.status === SubscriptionStatus.PAST_DUE) {
       throw AppError.conflict('BILLING_ACTION_REQUIRED', 'Resolve the existing subscription in the billing portal first');
     }
-    if (current.provider === 'stripe' && ['active', 'trialing'].includes(current.status)) {
+    if (
+      current.provider === SubscriptionProvider.STRIPE &&
+      [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING].includes(current.status)
+    ) {
       throw AppError.conflict('ALREADY_PRO', 'Your Pro subscription is already active');
     }
-    const plan = await this.plans.getByTier('pro');
+    const plan = await this.plans.getByTier(PlanTier.PRO);
     if (!plan.isActive) throw AppError.serviceUnavailable('PRO_PLAN_UNAVAILABLE', 'The Pro plan is currently unavailable');
     const front = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
     return this.stripe.createCheckout({
@@ -106,21 +108,22 @@ export class BillingService {
     if (!userId || !Types.ObjectId.isValid(userId)) return;
     const existing = await this.ensureCurrentPeriod(userId);
     if (
-      existing.provider === 'stripe' &&
+      existing.provider === SubscriptionProvider.STRIPE &&
       existing.stripeSubscriptionId &&
       existing.stripeSubscriptionId !== remote.id &&
-      ['active', 'trialing'].includes(existing.status)
+      [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING].includes(existing.status)
     ) return;
 
-    const active = remote.status === 'active' || remote.status === 'trialing';
-    const nextStatus: 'active' | 'trialing' | 'past_due' | 'canceled' = active
-      ? remote.status === 'trialing' ? 'trialing' : 'active'
-      : remote.status === 'past_due' ? 'past_due' : 'canceled';
-    const plan = await this.plans.getByTier(active ? 'pro' : 'free');
+    const active = remote.status === SubscriptionStatus.ACTIVE || remote.status === SubscriptionStatus.TRIALING;
+    const nextStatus = active
+      ? remote.status === SubscriptionStatus.TRIALING ? SubscriptionStatus.TRIALING : SubscriptionStatus.ACTIVE
+      : remote.status === SubscriptionStatus.PAST_DUE ? SubscriptionStatus.PAST_DUE : SubscriptionStatus.CANCELED;
+    const plan = await this.plans.getByTier(active ? PlanTier.PRO : PlanTier.FREE);
     const remoteStart = remote.current_period_start ? new Date(remote.current_period_start * 1000) : new Date();
     const remoteEnd = remote.current_period_end ? new Date(remote.current_period_end * 1000) : addMonth(remoteStart);
     const periodChanged = new Date(existing.currentPeriodStart).getTime() !== remoteStart.getTime();
-    const leavingPaidEntitlement = !active && ['active', 'trialing'].includes(existing.status);
+    const leavingPaidEntitlement = !active &&
+      [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING].includes(existing.status);
     const fallbackStart = new Date();
 
     await this.subscriptions.updateOne(
@@ -128,7 +131,7 @@ export class BillingService {
       {
         $set: {
           planId: plan._id,
-          provider: 'stripe',
+          provider: SubscriptionProvider.STRIPE,
           status: nextStatus,
           stripeCustomerId: String(remote.customer || existing.stripeCustomerId || ''),
           stripeSubscriptionId: remote.id,
@@ -149,11 +152,14 @@ export class BillingService {
     const objectId = new Types.ObjectId(userId);
     let current = await this.subscriptions.findOne({ userId: objectId }).lean().exec();
     if (!current) {
-      const free = await this.plans.getByTier('free');
+      const free = await this.plans.getByTier(PlanTier.FREE);
       const start = new Date();
       try {
         current = (await this.subscriptions.create({
-          userId: objectId, planId: free._id, status: 'free', provider: 'free',
+          userId: objectId,
+          planId: free._id,
+          status: SubscriptionStatus.FREE,
+          provider: SubscriptionProvider.FREE,
           currentPeriodStart: start, currentPeriodEnd: addMonth(start), generationCount: 0,
         })).toObject();
       } catch {
@@ -162,7 +168,11 @@ export class BillingService {
     }
     if (!current) throw AppError.serviceUnavailable('SUBSCRIPTION_UNAVAILABLE', 'Could not load subscription');
 
-    const freeEntitlement = current.status === 'free' || current.status === 'past_due' || current.status === 'canceled';
+    const freeEntitlement = [
+      SubscriptionStatus.FREE,
+      SubscriptionStatus.PAST_DUE,
+      SubscriptionStatus.CANCELED,
+    ].includes(current.status);
     if (freeEntitlement && new Date(current.currentPeriodEnd).getTime() <= Date.now()) {
       const start = new Date();
       await this.subscriptions.updateOne(

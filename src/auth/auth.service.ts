@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
-import { JwtPayload } from '../common/types/jwt-payload';
+import { AccountRole, JwtPayload } from '../common/types/jwt-payload';
 import { LoginDto, RegisterDto } from './auth.dto';
 import { User, UserDocument } from './user.schema';
 import { AppError } from '../common/errors/app-error';
@@ -28,7 +28,7 @@ export class AuthService {
         email,
         name: dto.name.trim(),
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
-        role: 'user',
+        role: AccountRole.USER,
       });
       return this.session(created);
     } catch (error: unknown) {

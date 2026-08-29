@@ -66,6 +66,25 @@ async function run() {
   check('default Free allowance is 3', initialPlans.data?.find((p) => p.tier === 'free')?.generationLimit === 3);
   check('default Pro is $9.99 with 30 generations', initialPlans.data?.find((p) => p.tier === 'pro')?.priceCents === 999 && initialPlans.data?.find((p) => p.tier === 'pro')?.generationLimit === 30);
 
+  const freePlan = initialPlans.data?.find((plan) => plan.tier === 'free');
+  const proPlan = initialPlans.data?.find((plan) => plan.tier === 'pro');
+  const memberAssignmentForbidden = await call(`/admin/members/${userId}/plan`, {
+    method: 'PATCH', token, body: { planId: proPlan?._id },
+  });
+  check('members cannot assign plans', memberAssignmentForbidden.status === 403, `status ${memberAssignmentForbidden.status}`);
+
+  const assignedPro = await call(`/admin/members/${userId}/plan`, {
+    method: 'PATCH', token: adminToken, body: { planId: proPlan?._id },
+  });
+  check('admin can assign Pro to a member', assignedPro.status === 200 && assignedPro.data?.plan?.tier === 'pro');
+  const adminGrantedStatus = await call('/billing/me', { token });
+  check('admin-assigned plan is the effective entitlement', adminGrantedStatus.data?.plan?.tier === 'pro');
+
+  const assignedFree = await call(`/admin/members/${userId}/plan`, {
+    method: 'PATCH', token: adminToken, body: { planId: freePlan?._id },
+  });
+  check('admin can change the member back to Free', assignedFree.status === 200 && assignedFree.data?.plan?.tier === 'free');
+
   const forbidden = await call('/admin/plans/pro', { method: 'PATCH', token, body: { priceCents: 1 } });
   check('members cannot edit plans', forbidden.status === 403, `status ${forbidden.status}`);
 

@@ -5,6 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
 import { User } from '../auth/user.schema';
 import { ClothingType } from '../clothing-types/clothing-type.schema';
+import { AccountRole } from '../common/types/jwt-payload';
 import { SiteContent } from '../content/content.schema';
 import { Look } from '../looks/look.schema';
 
@@ -53,7 +54,7 @@ export class SeedService implements OnModuleInit {
       email,
       name: 'Wear It Admin',
       passwordHash: await bcrypt.hash(password, 12),
-      role: 'admin',
+      role: AccountRole.ADMIN,
     });
     this.logger.log(`Created initial admin: ${email}`);
   }

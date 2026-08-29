@@ -3,11 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppError } from '../common/errors/app-error';
 import { UpdatePlanDto } from './plan.dto';
-import { Plan, PlanTier } from './plan.schema';
+import { PlanTier } from './plan.enums';
+import { Plan } from './plan.schema';
 
 const DEFAULTS: Record<PlanTier, Partial<Plan>> = {
-  free: {
-    tier: 'free', name: 'Free', nameAr: 'مجاني',
+  [PlanTier.FREE]: {
+    tier: PlanTier.FREE, name: 'Free', nameAr: 'مجاني',
     description: 'Try Wear It with a small monthly generation allowance.',
     descriptionAr: 'جرّب Wear It مع عدد محدود من التوليدات شهرياً.',
     priceCents: 0, currency: 'USD', generationLimit: 3,
@@ -15,8 +16,8 @@ const DEFAULTS: Record<PlanTier, Partial<Plan>> = {
     featuresAr: ['3 توليدات إطلالة بالذكاء الاصطناعي شهرياً', 'خزانة افتراضية', 'حفظ الصور الشخصية'],
     isActive: true, sortOrder: 1,
   },
-  pro: {
-    tier: 'pro', name: 'Pro', nameAr: 'برو',
+  [PlanTier.PRO]: {
+    tier: PlanTier.PRO, name: 'Pro', nameAr: 'برو',
     description: 'For members who create looks regularly.',
     descriptionAr: 'للمستخدمين الذين ينشئون إطلالات بشكل منتظم.',
     priceCents: 999, currency: 'USD', generationLimit: 30,
@@ -31,7 +32,7 @@ export class PlansService implements OnModuleInit {
   constructor(@InjectModel(Plan.name) private readonly model: Model<Plan>) {}
 
   async onModuleInit() {
-    for (const tier of ['free', 'pro'] as const) {
+    for (const tier of Object.values(PlanTier)) {
       await this.model.updateOne({ tier }, { $setOnInsert: DEFAULTS[tier] }, { upsert: true }).exec();
     }
   }
@@ -51,13 +52,13 @@ export class PlansService implements OnModuleInit {
   }
 
   async update(tier: PlanTier, dto: UpdatePlanDto) {
-    if (tier === 'free' && dto.priceCents !== undefined && dto.priceCents !== 0) {
+    if (tier === PlanTier.FREE && dto.priceCents !== undefined && dto.priceCents !== 0) {
       throw AppError.badRequest('FREE_PLAN_MUST_BE_FREE', 'The Free plan price must remain zero');
     }
-    if (tier === 'free' && dto.isActive === false) {
+    if (tier === PlanTier.FREE && dto.isActive === false) {
       throw AppError.badRequest('FREE_PLAN_REQUIRED', 'The Free plan cannot be disabled');
     }
-    if (tier === 'pro' && dto.priceCents !== undefined && dto.priceCents < 1) {
+    if (tier === PlanTier.PRO && dto.priceCents !== undefined && dto.priceCents < 1) {
       throw AppError.badRequest('PRO_PLAN_PRICE_REQUIRED', 'The Pro plan price must be greater than zero');
     }
     const update = { ...dto, ...(dto.currency ? { currency: dto.currency.toUpperCase() } : {}) };

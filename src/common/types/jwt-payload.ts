@@ -1,4 +1,9 @@
-export type AccountRole = 'user' | 'admin';
+export enum AccountRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
+export const ACCOUNT_ROLES = Object.values(AccountRole);
 
 export interface JwtPayload {
   sub: string;

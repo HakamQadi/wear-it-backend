@@ -6,9 +6,10 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtPayload } from '../common/types/jwt-payload';
 import { AppError } from '../common/errors/app-error';
+import { AccountRole } from '../common/types/jwt-payload';
 import { BillingService } from './billing.service';
 import { UpdatePlanDto } from './plan.dto';
-import { PlanTier } from './plan.schema';
+import { isPlanTier, PlanTier } from './plan.enums';
 import { PlansService } from './plans.service';
 import { StripeService } from './stripe.service';
 
@@ -24,12 +25,12 @@ export class PlansController {
   plansPublic() { return this.plans.listPublic(); }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles(AccountRole.ADMIN)
   @Get('admin/plans')
   plansAdmin() { return this.plans.listAdmin(); }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles(AccountRole.ADMIN)
   @Patch('admin/plans/:tier')
   updatePlan(@Param('tier') rawTier: string, @Body() dto: UpdatePlanDto) {
     return this.plans.update(this.parseTier(rawTier), dto);
@@ -58,7 +59,7 @@ export class PlansController {
   }
 
   private parseTier(value: string): PlanTier {
-    if (value === 'free' || value === 'pro') return value;
+    if (isPlanTier(value)) return value;
     throw AppError.badRequest('INVALID_PLAN_TIER', 'Plan tier must be free or pro');
   }
 }

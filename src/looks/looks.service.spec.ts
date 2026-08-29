@@ -2,6 +2,7 @@ import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { expectAppError } from '../common/errors/expect-app-error';
 import { Types } from 'mongoose';
 import { PhotosService } from '../photos/photos.service';
+import { BillingService } from '../plans/billing.service';
 import { TryOnService } from '../try-on/try-on.service';
 import { StorageService } from '../uploads/storage.service';
 import { Look } from './look.schema';
@@ -45,6 +46,10 @@ function build(rows: ItemRow[], composeResult: Promise<{ imageUrl: string }> = P
 
   const tryOn = { composeLook: jest.fn(() => composeResult) } as unknown as TryOnService;
   const storage = { releaseIfUnused: jest.fn() } as unknown as StorageService;
+  const billing = {
+    reserveGeneration: jest.fn(async () => ({ subscriptionId: new Types.ObjectId().toString(), periodStart: new Date() })),
+    releaseGeneration: jest.fn(),
+  } as unknown as BillingService;
 
   const service = new LooksService(
     lookModel as unknown as never,
@@ -52,8 +57,9 @@ function build(rows: ItemRow[], composeResult: Promise<{ imageUrl: string }> = P
     photos,
     tryOn,
     storage,
+    billing,
   );
-  return { service, tryOn, photos, created, findFilters, lookModel };
+  return { service, tryOn, photos, billing, created, findFilters, lookModel };
 }
 
 const photoId = new Types.ObjectId().toString();

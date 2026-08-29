@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { PLAN_TIERS, PlanTier } from './plan.enums';
 
-export type PlanTier = 'free' | 'pro';
 export type PlanDocument = HydratedDocument<Plan>;
 
 @Schema({ timestamps: true, collection: 'plans' })
 export class Plan {
-  @Prop({ required: true, unique: true, enum: ['free', 'pro'] }) tier!: PlanTier;
+  @Prop({ required: true, unique: true, enum: PLAN_TIERS }) tier!: PlanTier;
   @Prop({ required: true, trim: true }) name!: string;
   @Prop({ required: true, trim: true }) nameAr!: string;
   @Prop({ default: '' }) description!: string;
